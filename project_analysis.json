@@ -1,0 +1,6 @@
+{
+  "function_name": "Bird::Bird(const QPointF& pos, const QPixmap& pixmap, const qreal &groundStartPosY, int scrWidth, int scrHeight, qreal scaleF)",
+  "params": "",
+  "body": "",
+  "calls": []
+}
