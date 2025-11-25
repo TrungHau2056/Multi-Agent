@@ -75,14 +75,142 @@ AI::AI(class Game *parent_game, int aiNeuronCount, int aiBatchSize, int aiEpochs
     network << tiny_dnn::fully_connected_layer(neuronCount, 1) << tiny_dnn::sigmoid_layer();
 }
 
-// --- CLASS: Game (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Sound\Sound.h) ---
-class Game
-
-// --- CLASS: AI (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Game\Game.h) ---
-class AI
-
 // --- CLASS: QGraphicsTextItem (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\AI\AI.h) ---
 class QGraphicsTextItem
+
+// --- CLASS: AI (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\AI\AI.h) ---
+class AI
+{
+public:
+    AI(class Game *parent_game, int aiNeuronCount, int aiBatchSize, int aiEpochs, int aiUpdateInterval, float aiClickThreshold);
+    ~AI();
+
+    void birdTriggered();
+    void train();
+    void clearData();
+    void stopTrain();
+
+    bool trainingFinished;
+
+    static float normalize(float x, float limit);
+
+private:
+    int neuronCount;
+    int batchSize;
+    int epochs;
+    int updateInterval;
+    int curEpoch;
+    int updateCount;
+
+    float clickThreshold;
+    float birdSpeedY;
+    float birdOldY;
+
+    bool realtimeLearn;
+    bool selfTrain;
+    bool predictClicked;
+    bool epochReset;
+
+    Vector2<qreal> vector;
+
+    class QTimer *updater;
+    class QTimer *randomPlayer;
+    class QTimer *birdSpeed;
+
+    Vector2<qreal> update(bool reg = true);
+
+    bool predictClick(Vector2<qreal> instant_vector, float *prediction_ref = nullptr);
+
+    class QGraphicsLineItem *vectorLine;
+    class QGraphicsLineItem *birdSpeedVectorLine;
+    class QGraphicsLineItem *predictionBar;
+    class QGraphicsTextItem *aiInfo;
+
+    tiny_dnn::network<tiny_dnn::sequential> network;
+    std::vector<tiny_dnn::vec_t> input;
+    std::vector<tiny_dnn::vec_t> output;
+    tiny_dnn::adam optimization;
+
+    void epochUpdate();
+
+protected:
+    class Game *game;
+
+}
+
+// --- CLASS: Game (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Game\Game.h) ---
+class Game
+{
+public:
+    Game(class View *GraphicsView, class QSettings *cfg, class QSettings *registry, int windowWidth, int windowHeight);
+    virtual ~Game();
+
+   void clickEvent();
+   void updateScore();
+   void gameOver();
+   void prepareFirstGame();
+   void prepareNewRound();
+   void soundEnable();
+   void soundDisable();
+   void AIEnable();
+   void AIDisable();
+
+   bool isGameFinished();
+   bool isGameStarted();
+   bool isGameActuallyStarted();
+   bool isSoundEnabled();
+   bool isAIEnabled();
+
+   int getScore();
+   int getScoreRecord();
+   int getScreenWidth();
+   int getScreenHeight();
+
+   int birdClosestPipe; // Move from here!
+
+   qreal getScaleFactor();
+
+   Sound *sound_die;
+   Sound *sound_hit;
+   Sound *sound_point;
+   Sound *sound_swooshing;
+   Sound *sound_wing;
+
+   class Scene *scene;
+   class View *graphicsView;
+
+   bool aiPlays;
+
+private:
+    bool soundEnabled;
+    bool gameFinished, gameStarted;
+    bool gameActuallyStarted;
+    bool physicsComplexAnalysis;
+    bool physicsDisableCollisionDetection;
+
+    int score, scoreRecord;
+    int screenWidth, screenHeight;
+    int physicsTickRate;
+
+    int aiNeuronCount;
+    int aiBatchSize;
+    int aiEpochs;
+    int aiUpdateInterval;
+    float aiClickThreshold;
+
+    qreal physicsSpeedFactor;
+    qreal scaleFactor;
+
+    void loadConfiguration();
+
+protected:
+    class QSettings *config;
+    class QSettings *registry;
+
+    class Physics *physics;
+
+    class AI *ai;
+}
 
 // --- CLASS: QGraphicsLineItem (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\AI\AI.h) ---
 class QGraphicsLineItem
@@ -90,144 +218,110 @@ class QGraphicsLineItem
 // --- CLASS: QTimer (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\View\View.h) ---
 class QTimer
 
-// --- FUNCTION: Game::Game (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Game\Game.cpp) ---
-Game::Game(View *GraphicsView, QSettings *cfg, QSettings *settings, int windowWidth, int windowHeight)
-    : graphicsView(GraphicsView), screenWidth(windowWidth), screenHeight(windowHeight), config(cfg), registry(settings)
+// --- STRUCT: Vector2 (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\vector.h) ---
+struct Vector2
 {
-    scoreRecord = 0;
-    score = 0;
+    T x;
+    T y;
 
-    gameFinished = 0;
-    gameStarted = 0;
-    gameActuallyStarted = 0;
+    inline Vector2(void)
+    {
+        reset();
+    }
 
-    birdClosestPipe = 1;
+    inline Vector2(T x_, T y_)
+    {
+        x = x_;
+        y = y_;
+    }
 
-    aiPlays = false;
-    ai = nullptr;
+    inline Vector2(const Vector2 &vector2)
+    {
+        x = vector2.x;
+        y = vector2.y;
+    }
 
-    scaleFactor = GAME_DEFAULT_SCALEFACTOR;
-    soundEnabled = GAME_DEFAULT_SOUND_ENABLED;
+    inline Vector2 makeVector2(T x_, T y_)
+    {
+        Vector2 vector2;
+        vector2.x = x_;
+        vector2.y = y_;
+        return vector2;
+    }
 
-    sound_die = new Sound(SND_DIE, this);
-    sound_hit = new Sound(SND_HIT, this);
-    sound_point = new Sound(SND_POINT, this);
-    sound_swooshing = new Sound(SND_SWOOSHING, this);
-    sound_wing = new Sound(SND_WING, this);
+    inline Vector2 *makeVector2Temporary(T x_, T y_)
+    {
+        static Vector2 *vector2 = new Vector2(x_, y_);
+        return vector2;
+    }
 
-    loadConfiguration();
+    inline Vector2 operator + (const Vector2 &vector2)
+    {
+        Vector2 vector2_;
+        vector2_.x = x + vector2.x;
+        vector2_.y = y + vector2.y;
+        return vector2_;
+    }
 
-    scene = new Scene(this, QRectF(0, 0, screenWidth, screenHeight));
+    inline Vector2 operator - (const Vector2 &vector2)
+    {
+        Vector2 vector2_;
+        vector2_.x = x - vector2.x;
+        vector2_.y = y - vector2.y;
+        return vector2_;
+    }
 
-    physics = new Physics(this, physicsTickRate, physicsComplexAnalysis, true, physicsSpeedFactor, physicsDisableCollisionDetection);
-}
-
-// --- CLASS: QSettings (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\MainWindow\MainWindow.h) ---
-class QSettings
-
-// --- CLASS: Physics (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Physics\Physics.h) ---
-class Physics
-{
-public:
-    Physics(class Game *parent_game, int tickRate = 5, bool complexAnalyse = 0, bool isOnlyGround = 0, qreal speedFactor = 1.0, bool isCollisionDetectionDisabled = 0);
-    virtual ~Physics();
+    inline int operator * (const Vector2 &vector2)
+    {
+        int result;
+        result = (x * vector2.x) + (y * vector2.y);
+        return result;
+    }
 
-    void start();
-    void stop();
-    void switchOnlyGroundMove();
+    inline Vector2& operator = (const Vector2 &vector2)
+    {
+        if(this != &vector2)
+        {
+            x = vector2.x;
+            y = vector2.y;
+        }
+        return *this;
+    }
 
-    bool isOnlyGround();
+    inline bool operator == (const Vector2 &vector2)
+    {
+        if(x == vector2.x && y == vector2.y)
+            return true;
+        else
+            return false;
+    }
 
-    static int randInt(int low, int high);
+    inline bool operator != (const Vector2 &vector2)
+    {
+        return !(*this == vector2);
+    }
 
-    typedef struct{
-        qreal x;
-        qreal y;
-        qreal width;
-        qreal height;
-    }rectangle;
+    inline int dotProduct(const Vector2 &vector2)
+    {
+        return (*this * vector2);
+    }
 
-private:
-    int pipeCriticX;
+    inline static int dotProduct(const Vector2 &vector2_1, const Vector2 &vector2_2)
+    {
+        return (vector2_1 * vector2_2);
+    }
 
-    qreal speedfactor;
+    inline void reset(void)
+    {
+        x = (T)0;
+        y = (T)0;
+    }
 
-    void moveGround();
-    void movePipes();
-
-    bool collisionDetectionDisabled;
-    bool pipeMarkers[4];
-    bool markers[3];
-
-    rectangle birdRect;
-    rectangle _itemPipe;
-
-    class QTimer *physicsTimer;
-
-    static int pipeCriticXFinder(const class QGraphicsPixmapItem& item_pipe);
-
-    class QTransform *_transform;
-
-protected:
-    class Game *game;
-
-    class Bird *bird;
-
-    bool complexAnalysis;
-    bool onlyGround;
-
-    int updateInterval;
-
-    virtual bool collisionCheck();
-    virtual bool collisionCheckComplex(const class QGraphicsPixmapItem& item_pipe);
-}
-
-// --- MACRO/CONSTANT: GAME_DEFAULT_SCALEFACTOR (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define GAME_DEFAULT_SCALEFACTOR 1.6
-
-
-// --- FUNCTION: Sound (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Sound\Sound.h) ---
-Sound(const QString& filename, Game *parent_game) : QSound(filename), game(parent_game) { }
-
-// --- MACRO/CONSTANT: SND_DIE (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define SND_DIE PREFIX_SND "die.wav"
-
-
-// --- MACRO/CONSTANT: SND_WING (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define SND_WING PREFIX_SND "wing.wav"
-
-
-// --- MACRO/CONSTANT: SND_SWOOSHING (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define SND_SWOOSHING PREFIX_SND "swooshing.wav"
-
-
-// --- MACRO/CONSTANT: SND_POINT (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define SND_POINT PREFIX_SND "point.wav"
-
-
-// --- CLASS: View (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\View\View.h) ---
-class View : public QGraphicsView
-{
-    Q_OBJECT
-
-private:
-    class QElapsedTimer *fpsTimer;
-    class QTimer *strobeFPSUpdater;
-    int frameCount;
-    int tick;
-
-
-public:
-    View(QWidget *parent, class StrobeAPI *strobeAPI = nullptr);
-    ~View();
-
-    float fps();
-
-protected:
-    void paintEvent(class QPaintEvent *event) override;
-
-    class StrobeAPI *strobe;
-
+    inline static void reset(Vector2 &vector2)
+    {
+        vector2.x = (T)0;
+        vector2.y = (T)0;
+    }
 }
 
 // --- CLASS: Scene (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Scene\Scene.h) ---
@@ -303,105 +397,137 @@ protected:
 
 }
 
-// --- MACRO/CONSTANT: SND_HIT (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define SND_HIT PREFIX_SND "hit.wav"
-
-
-// --- MACRO/CONSTANT: GAME_DEFAULT_SOUND_ENABLED (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define GAME_DEFAULT_SOUND_ENABLED FALSE
-
-
-// --- FUNCTION: Physics::Physics (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Physics\Physics.cpp) ---
-Physics::Physics(Game *parent_game, int tickRate, bool complexAnalyse, bool isOnlyGround, qreal speedFactor, bool isCollisionDetectionDisabled)
- :  speedfactor(speedFactor), collisionDetectionDisabled(isCollisionDetectionDisabled), game(parent_game), complexAnalysis(complexAnalyse), onlyGround(isOnlyGround), updateInterval(tickRate)
+// --- CLASS: Sound (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Sound\Sound.h) ---
+class Sound : public QSound
 {
-    _transform = new QTransform();
+    Q_OBJECT
 
-    bird = game->scene->bird;
+protected:
+    Game *game;
 
-    pipeCriticX = pipeCriticXFinder(*(game->scene->pipe[0][0]));
+public:
+    Sound(const QString& filename, Game *parent_game) : QSound(filename), game(parent_game) { }
 
-    pipeMarkers[0] = 0;
-    pipeMarkers[1] = 0;
-    pipeMarkers[2] = 0;
-    pipeMarkers[3] = 0;
+    void playIfEnabled();
 
-
-    markers[0] = 0;
-    markers[1] = 0;
-    markers[2] = 0;
-
-
-    game->scene->pipe[0][0]->setPos(game->getScreenWidth(), 0);
-    game->scene->pipe[0][1]->setPos(game->getScreenWidth(), 0);
-    game->scene->pipe[0][2]->setPos(game->getScreenWidth(), 0);
-    game->scene->pipe[1][0]->setPos(game->getScreenWidth(), 0);
-    game->scene->pipe[1][1]->setPos(game->getScreenWidth(), 0);
-    game->scene->pipe[1][2]->setPos(game->getScreenWidth(), 0);
-
-    physicsTimer = new QTimer();
-
-    QObject::connect(physicsTimer, &QTimer::timeout, [this](){
-        if(!onlyGround)
-        {
-            if(collisionCheck())
-            {
-                bird->fall();
-                game->gameOver();
-                return;
-            }
-            movePipes();
-        }
-        moveGround();
-        QApplication::processEvents();
-    });
-
-    physicsTimer->setInterval(onlyGround ? updateInterval * PHYSICS_ONLYGROUND_SLOW_RATE : updateInterval);
-    physicsTimer->start();
 }
 
-// --- CLASS: Bird (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Scene\Scene.h) ---
-class Bird
-
-// --- CLASS: QTransform (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Physics\Physics.h) ---
-class QTransform
-
-// --- CLASS: QGraphicsPixmapItem (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Physics\Physics.h) ---
-class QGraphicsPixmapItem
-
-// --- FUNCTION: View::View (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\View\View.cpp) ---
-View::View(QWidget *parent, StrobeAPI *strobeAPI) : QGraphicsView(parent), strobe(strobeAPI)
+// --- CLASS: Physics (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Physics\Physics.h) ---
+class Physics
 {
-    frameCount = 0;
-    tick = 0;
+public:
+    Physics(class Game *parent_game, int tickRate = 5, bool complexAnalyse = 0, bool isOnlyGround = 0, qreal speedFactor = 1.0, bool isCollisionDetectionDisabled = 0);
+    virtual ~Physics();
 
-    fpsTimer = new QElapsedTimer();
-    fpsTimer->start();
+    void start();
+    void stop();
+    void switchOnlyGroundMove();
 
-#ifndef STROBE_DISABLED
-    if(strobe != nullptr)
-    {
-        strobeFPSUpdater = new QTimer(this);
-        strobeFPSUpdater->setInterval(25);
-        connect(strobeFPSUpdater, &QTimer::timeout, [this]() {
-            strobe->setFPS((double)fps());
-        });
-        strobeFPSUpdater->start();
-    }
-#endif
+    bool isOnlyGround();
+
+    static int randInt(int low, int high);
+
+    typedef struct{
+        qreal x;
+        qreal y;
+        qreal width;
+        qreal height;
+    }rectangle;
+
+private:
+    int pipeCriticX;
+
+    qreal speedfactor;
+
+    void moveGround();
+    void movePipes();
+
+    bool collisionDetectionDisabled;
+    bool pipeMarkers[4];
+    bool markers[3];
+
+    rectangle birdRect;
+    rectangle _itemPipe;
+
+    class QTimer *physicsTimer;
+
+    static int pipeCriticXFinder(const class QGraphicsPixmapItem& item_pipe);
+
+    class QTransform *_transform;
+
+protected:
+    class Game *game;
+
+    class Bird *bird;
+
+    bool complexAnalysis;
+    bool onlyGround;
+
+    int updateInterval;
+
+    virtual bool collisionCheck();
+    virtual bool collisionCheckComplex(const class QGraphicsPixmapItem& item_pipe);
 }
 
-// --- CLASS: StrobeAPI (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\View\View.h) ---
-class StrobeAPI
+// --- FUNCTION: Game::Game (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Game\Game.cpp) ---
+Game::Game(View *GraphicsView, QSettings *cfg, QSettings *settings, int windowWidth, int windowHeight)
+    : graphicsView(GraphicsView), screenWidth(windowWidth), screenHeight(windowHeight), config(cfg), registry(settings)
+{
+    scoreRecord = 0;
+    score = 0;
+
+    gameFinished = 0;
+    gameStarted = 0;
+    gameActuallyStarted = 0;
+
+    birdClosestPipe = 1;
+
+    aiPlays = false;
+    ai = nullptr;
+
+    scaleFactor = GAME_DEFAULT_SCALEFACTOR;
+    soundEnabled = GAME_DEFAULT_SOUND_ENABLED;
+
+    sound_die = new Sound(SND_DIE, this);
+    sound_hit = new Sound(SND_HIT, this);
+    sound_point = new Sound(SND_POINT, this);
+    sound_swooshing = new Sound(SND_SWOOSHING, this);
+    sound_wing = new Sound(SND_WING, this);
+
+    loadConfiguration();
+
+    scene = new Scene(this, QRectF(0, 0, screenWidth, screenHeight));
+
+    physics = new Physics(this, physicsTickRate, physicsComplexAnalysis, true, physicsSpeedFactor, physicsDisableCollisionDetection);
+}
 
-// --- CLASS: QPaintEvent (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\View\View.h) ---
-class QPaintEvent
+// --- CLASS: QSettings (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\MainWindow\MainWindow.h) ---
+class QSettings
 
-// --- CLASS: QGraphicsOpacityEffect (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Scene\Scene.h) ---
-class QGraphicsOpacityEffect
-
-// --- CLASS: QPropertyAnimation (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Scene\Scene.h) ---
-class QPropertyAnimation
+// --- CLASS: View (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\View\View.h) ---
+class View : public QGraphicsView
+{
+    Q_OBJECT
+
+private:
+    class QElapsedTimer *fpsTimer;
+    class QTimer *strobeFPSUpdater;
+    int frameCount;
+    int tick;
+
+
+public:
+    View(QWidget *parent, class StrobeAPI *strobeAPI = nullptr);
+    ~View();
+
+    float fps();
+
+protected:
+    void paintEvent(class QPaintEvent *event) override;
+
+    class StrobeAPI *strobe;
+
+}
 
 // --- FUNCTION: Scene::Scene (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Scene\Scene.cpp) ---
 Scene::Scene(Game *parent_game, const QRectF& rect) : QGraphicsScene(rect), game(parent_game)
@@ -631,23 +757,219 @@ Scene::Scene(Game *parent_game, const QRectF& rect) : QGraphicsScene(rect), game
 #define GROUP_MAX_ITEM_COUNT 16
 
 
-// --- CLASS: Button (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Scene\Scene.h) ---
-class Button
-
 // --- CLASS: QPainter (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Scene\Scene.h) ---
 class QPainter
 
-// --- FUNCTION: Physics::start (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Physics\Physics.cpp) ---
-void Physics::start()
+// --- CLASS: QGraphicsPixmapItem (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Physics\Physics.h) ---
+class QGraphicsPixmapItem
+
+// --- CLASS: Button (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Button\Button.h) ---
+class Button : public QGraphicsPixmapItem
 {
+    typedef void (*Function)(Game *game_instance);
+
+private:
+    QPixmap Pixmap;
+    QPixmap Pixmap2;
+    bool toggle;
+
+public:
+    Button(Game *parent_game, const QPixmap& pixmap, Function function, bool toggleMode = false, const QPixmap& pixmap2 = QPixmap(), Function function2 = nullptr)
+        : QGraphicsPixmapItem(pixmap), Pixmap(pixmap), Pixmap2(pixmap2), toggle(toggleMode), buttonFunction(function), buttonFunction2(function2), game(parent_game)  {}
+
+    virtual void invoke(Game *parent_game = nullptr);
+
+protected:
+    Function buttonFunction;
+    Function buttonFunction2;
+    Game *game;
+}
+
+// --- CLASS: Bird (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Bird\Bird.h) ---
+class Bird : public QObject, public QGraphicsPixmapItem
+{
+    Q_OBJECT
+    Q_PROPERTY(QPointF pos READ pos WRITE setPos)
+    Q_PROPERTY(qreal rotation READ rotation WRITE setRotation)
+    Q_PROPERTY(qreal y READ y WRITE setY)
+
+public:
+    Bird(const QPointF &pos, const QPixmap& pixmap, const qreal& groundStartPosY, int scrWidth, int scrHeight, qreal scaleF);
+
+    enum BirdTypes{
+        yellow,
+        blue,
+        red
+    };
+
+    void setRotation(qreal angle);
+    void startOscillate();
+    void stopOscillate();
+    void rise();
+    void setColor(BirdTypes type);
+    void fall();
+
+private:
+    enum WingStates{
+        up,
+        middle,
+        down
+    };
+
+    WingStates wingState;
+
+    bool wingDirection;
+    bool oscillateDirection;
+
+    BirdTypes birdType;
+
+    qreal currentRotation;
+
+    class QTimer *birdDesigner;
+
+    class QPropertyAnimation *yAnimator;
+    class QPropertyAnimation *oscillator;
+    class QPropertyAnimation *rotator;
+
+private slots:
+    void gravitation();
+    void designBird();
+    void oscillate();
+
+protected:
+    qreal groundYPos;
+    qreal scaleFactor;
+
+    void rotate(const qreal &end, const int &duration, const QEasingCurve &curve);
+
+    int screenWidth, screenHeight;
+}
+
+// --- CLASS: QPropertyAnimation (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Scene\Scene.h) ---
+class QPropertyAnimation
+
+// --- CLASS: QGraphicsOpacityEffect (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Scene\Scene.h) ---
+class QGraphicsOpacityEffect
+
+// --- FUNCTION: Physics::Physics (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Physics\Physics.cpp) ---
+Physics::Physics(Game *parent_game, int tickRate, bool complexAnalyse, bool isOnlyGround, qreal speedFactor, bool isCollisionDetectionDisabled)
+ :  speedfactor(speedFactor), collisionDetectionDisabled(isCollisionDetectionDisabled), game(parent_game), complexAnalysis(complexAnalyse), onlyGround(isOnlyGround), updateInterval(tickRate)
+{
+    _transform = new QTransform();
+
+    bird = game->scene->bird;
+
+    pipeCriticX = pipeCriticXFinder(*(game->scene->pipe[0][0]));
+
+    pipeMarkers[0] = 0;
+    pipeMarkers[1] = 0;
+    pipeMarkers[2] = 0;
+    pipeMarkers[3] = 0;
+
+
+    markers[0] = 0;
+    markers[1] = 0;
+    markers[2] = 0;
+
+
+    game->scene->pipe[0][0]->setPos(game->getScreenWidth(), 0);
+    game->scene->pipe[0][1]->setPos(game->getScreenWidth(), 0);
+    game->scene->pipe[0][2]->setPos(game->getScreenWidth(), 0);
+    game->scene->pipe[1][0]->setPos(game->getScreenWidth(), 0);
+    game->scene->pipe[1][1]->setPos(game->getScreenWidth(), 0);
+    game->scene->pipe[1][2]->setPos(game->getScreenWidth(), 0);
+
+    physicsTimer = new QTimer();
+
+    QObject::connect(physicsTimer, &QTimer::timeout, [this](){
+        if(!onlyGround)
+        {
+            if(collisionCheck())
+            {
+                bird->fall();
+                game->gameOver();
+                return;
+            }
+            movePipes();
+        }
+        moveGround();
+        QApplication::processEvents();
+    });
+
+    physicsTimer->setInterval(onlyGround ? updateInterval * PHYSICS_ONLYGROUND_SLOW_RATE : updateInterval);
     physicsTimer->start();
 }
 
-// --- FUNCTION: StrobeDialog::setPos (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\StrobeDialog\StrobeDialog.cpp) ---
-void StrobeDialog::setPos(int posX, int posY)
+// --- CLASS: QTransform (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Physics\Physics.h) ---
+class QTransform
+
+// --- MACRO/CONSTANT: SND_POINT (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define SND_POINT PREFIX_SND "point.wav"
+
+
+// --- MACRO/CONSTANT: SND_DIE (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define SND_DIE PREFIX_SND "die.wav"
+
+
+// --- MACRO/CONSTANT: SND_HIT (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define SND_HIT PREFIX_SND "hit.wav"
+
+
+// --- MACRO/CONSTANT: GAME_DEFAULT_SOUND_ENABLED (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define GAME_DEFAULT_SOUND_ENABLED FALSE
+
+
+// --- MACRO/CONSTANT: GAME_DEFAULT_SCALEFACTOR (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define GAME_DEFAULT_SCALEFACTOR 1.6
+
+
+// --- MACRO/CONSTANT: SND_SWOOSHING (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define SND_SWOOSHING PREFIX_SND "swooshing.wav"
+
+
+// --- MACRO/CONSTANT: SND_WING (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define SND_WING PREFIX_SND "wing.wav"
+
+
+// --- CLASS: QPaintEvent (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\View\View.h) ---
+class QPaintEvent
+
+// --- CLASS: StrobeAPI (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\View\View.h) ---
+class StrobeAPI
+
+// --- FUNCTION: View::View (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\View\View.cpp) ---
+View::View(QWidget *parent, StrobeAPI *strobeAPI) : QGraphicsView(parent), strobe(strobeAPI)
 {
-    setGeometry(posX, posY, width(), height());
+    frameCount = 0;
+    tick = 0;
+
+    fpsTimer = new QElapsedTimer();
+    fpsTimer->start();
+
+#ifndef STROBE_DISABLED
+    if(strobe != nullptr)
+    {
+        strobeFPSUpdater = new QTimer(this);
+        strobeFPSUpdater->setInterval(25);
+        connect(strobeFPSUpdater, &QTimer::timeout, [this]() {
+            strobe->setFPS((double)fps());
+        });
+        strobeFPSUpdater->start();
+    }
+#endif
 }
+
+// --- MACRO/CONSTANT: IMG_BACKGROUND_DAY (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_BACKGROUND_DAY PREFIX_IMG "background_day.png"
+
+
+// --- MACRO/CONSTANT: IMG_AI (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_AI PREFIX_IMG "ai.png"
+
+
+// --- MACRO/CONSTANT: GROUP_GAMEPLAY (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define GROUP_GAMEPLAY 1
+
 
 // --- FUNCTION: Game::getScreenWidth (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Game\Game.cpp) ---
 int Game::getScreenWidth()
@@ -655,15 +977,101 @@ int Game::getScreenWidth()
     return screenWidth;
 }
 
-// --- MACRO/CONSTANT: PHYSICS_ONLYGROUND_SLOW_RATE (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define PHYSICS_ONLYGROUND_SLOW_RATE 2.0
+// --- MACRO/CONSTANT: IMG_SCOREBOARD (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_SCOREBOARD PREFIX_IMG "scoreBoard.png"
 
 
-// --- FUNCTION: StrobeDialog::setInterval (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\StrobeDialog\StrobeDialog.cpp) ---
-void StrobeDialog::setInterval(int interval)
+// --- MACRO/CONSTANT: IMG_BUTTON_ABOUT (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_BUTTON_ABOUT PREFIX_IMG "about.png"
+
+
+// --- MACRO/CONSTANT: IMG_SOUND_ENABLED (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_SOUND_ENABLED PREFIX_IMG "soundEnabled.png"
+
+
+// --- MACRO/CONSTANT: IMG_GAMEINFO (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_GAMEINFO PREFIX_IMG "gameInfo.png"
+
+
+// --- FUNCTION: Game::getScreenHeight (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Game\Game.cpp) ---
+int Game::getScreenHeight()
 {
-    updateTimer->setInterval(interval);
+    return screenHeight;
 }
+
+// --- MACRO/CONSTANT: GROUP_FIRSTSCREEN (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define GROUP_FIRSTSCREEN 3
+
+
+// --- MACRO/CONSTANT: IMG_READY (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_READY PREFIX_IMG "ready.png"
+
+
+// --- MACRO/CONSTANT: IMG_GAMEOVER (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_GAMEOVER PREFIX_IMG "gameOver.png"
+
+
+// --- MACRO/CONSTANT: IMG_LOGO (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_LOGO PREFIX_IMG "logo.png"
+
+
+// --- MACRO/CONSTANT: IMG_PIPE_UP (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_PIPE_UP PREFIX_IMG "pipe_up.png"
+
+
+// --- MACRO/CONSTANT: IMG_BIRD_YELLOW_UP (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_BIRD_YELLOW_UP PREFIX_IMG "bird_yellow_up.png"
+
+
+// --- MACRO/CONSTANT: GROUP_NEWROUND (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define GROUP_NEWROUND 0
+
+
+// --- FUNCTION: StrobeDialog::setPos (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\StrobeDialog\StrobeDialog.cpp) ---
+void StrobeDialog::setPos(int posX, int posY)
+{
+    setGeometry(posX, posY, width(), height());
+}
+
+// --- MACRO/CONSTANT: GROUP_ROUNDEND (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define GROUP_ROUNDEND 2
+
+
+// --- MACRO/CONSTANT: IMG_GROUND_SEGMENT (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_GROUND_SEGMENT PREFIX_IMG "ground_segment.png"
+
+
+// --- MACRO/CONSTANT: IMG_SMALLNUMBER_ZERO (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_SMALLNUMBER_ZERO PREFIX_IMG "20.png"
+
+
+// --- MACRO/CONSTANT: AI_DISABLED (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define AI_DISABLED
+
+
+// --- MACRO/CONSTANT: IMG_BUTTON_PLAY (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_BUTTON_PLAY PREFIX_IMG "play.png"
+
+
+// --- MACRO/CONSTANT: IMG_BIGNUMBER_ZERO (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_BIGNUMBER_ZERO PREFIX_IMG "0.png"
+
+
+// --- MACRO/CONSTANT: IMG_AIPLAY (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_AIPLAY PREFIX_IMG "aiPlay.png"
+
+
+// --- MACRO/CONSTANT: IMG_INFO (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_INFO PREFIX_IMG "info.png"
+
+
+// --- MACRO/CONSTANT: IMG_PIPE_DOWN (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_PIPE_DOWN PREFIX_IMG "pipe_down.png"
+
+
+// --- MACRO/CONSTANT: IMG_SOUND_DISABLED (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define IMG_SOUND_DISABLED PREFIX_IMG "soundDisabled.png"
+
 
 // --- FUNCTION: Bird::Bird (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Bird\Bird.cpp) ---
 Bird::Bird(const QPointF& pos, const QPixmap& pixmap, const qreal &groundStartPosY, int scrWidth, int scrHeight, qreal scaleF)
@@ -695,110 +1103,30 @@ Bird::Bird(const QPointF& pos, const QPixmap& pixmap, const qreal &groundStartPo
     birdDesigner->start(75);
 }
 
-// --- MACRO/CONSTANT: STROBE_DISABLED (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define STROBE_DISABLED
-
-
-// --- FUNCTION: Game::getScreenHeight (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Game\Game.cpp) ---
-int Game::getScreenHeight()
+// --- FUNCTION: Physics::isOnlyGround (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Physics\Physics.cpp) ---
+bool Physics::isOnlyGround()
 {
-    return screenHeight;
+    return onlyGround;
 }
 
-// --- MACRO/CONSTANT: IMG_AI (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_AI PREFIX_IMG "ai.png"
+// --- MACRO/CONSTANT: PHYSICS_ONLYGROUND_SLOW_RATE (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define PHYSICS_ONLYGROUND_SLOW_RATE 2.0
 
 
-// --- MACRO/CONSTANT: AI_DISABLED (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define AI_DISABLED
+// --- FUNCTION: StrobeDialog::setInterval (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\StrobeDialog\StrobeDialog.cpp) ---
+void StrobeDialog::setInterval(int interval)
+{
+    updateTimer->setInterval(interval);
+}
 
+// --- FUNCTION: Physics::start (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Physics\Physics.cpp) ---
+void Physics::start()
+{
+    physicsTimer->start();
+}
 
-// --- MACRO/CONSTANT: IMG_GAMEOVER (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_GAMEOVER PREFIX_IMG "gameOver.png"
-
-
-// --- MACRO/CONSTANT: IMG_INFO (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_INFO PREFIX_IMG "info.png"
-
-
-// --- MACRO/CONSTANT: IMG_GROUND_SEGMENT (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_GROUND_SEGMENT PREFIX_IMG "ground_segment.png"
-
-
-// --- MACRO/CONSTANT: IMG_BIRD_YELLOW_UP (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_BIRD_YELLOW_UP PREFIX_IMG "bird_yellow_up.png"
-
-
-// --- MACRO/CONSTANT: IMG_BUTTON_ABOUT (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_BUTTON_ABOUT PREFIX_IMG "about.png"
-
-
-// --- MACRO/CONSTANT: IMG_BACKGROUND_DAY (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_BACKGROUND_DAY PREFIX_IMG "background_day.png"
-
-
-// --- MACRO/CONSTANT: IMG_READY (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_READY PREFIX_IMG "ready.png"
-
-
-// --- MACRO/CONSTANT: IMG_PIPE_UP (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_PIPE_UP PREFIX_IMG "pipe_up.png"
-
-
-// --- MACRO/CONSTANT: IMG_SOUND_ENABLED (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_SOUND_ENABLED PREFIX_IMG "soundEnabled.png"
-
-
-// --- MACRO/CONSTANT: GROUP_FIRSTSCREEN (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define GROUP_FIRSTSCREEN 3
-
-
-// --- MACRO/CONSTANT: GROUP_ROUNDEND (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define GROUP_ROUNDEND 2
-
-
-// --- MACRO/CONSTANT: IMG_LOGO (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_LOGO PREFIX_IMG "logo.png"
-
-
-// --- MACRO/CONSTANT: IMG_SCOREBOARD (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_SCOREBOARD PREFIX_IMG "scoreBoard.png"
-
-
-// --- MACRO/CONSTANT: IMG_PIPE_DOWN (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_PIPE_DOWN PREFIX_IMG "pipe_down.png"
-
-
-// --- MACRO/CONSTANT: IMG_BIGNUMBER_ZERO (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_BIGNUMBER_ZERO PREFIX_IMG "0.png"
-
-
-// --- MACRO/CONSTANT: IMG_GAMEINFO (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_GAMEINFO PREFIX_IMG "gameInfo.png"
-
-
-// --- MACRO/CONSTANT: IMG_AIPLAY (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_AIPLAY PREFIX_IMG "aiPlay.png"
-
-
-// --- MACRO/CONSTANT: IMG_SOUND_DISABLED (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_SOUND_DISABLED PREFIX_IMG "soundDisabled.png"
-
-
-// --- MACRO/CONSTANT: GROUP_NEWROUND (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define GROUP_NEWROUND 0
-
-
-// --- MACRO/CONSTANT: GROUP_GAMEPLAY (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define GROUP_GAMEPLAY 1
-
-
-// --- MACRO/CONSTANT: IMG_BUTTON_PLAY (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_BUTTON_PLAY PREFIX_IMG "play.png"
-
-
-// --- MACRO/CONSTANT: IMG_SMALLNUMBER_ZERO (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
-#define IMG_SMALLNUMBER_ZERO PREFIX_IMG "20.png"
+// --- MACRO/CONSTANT: STROBE_DISABLED (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h) ---
+#define STROBE_DISABLED
 
 
 // --- FUNCTION: Bird::setColor (File: D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\Bird\Bird.cpp) ---

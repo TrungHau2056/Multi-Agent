@@ -23,6 +23,8 @@ class CppCodeExtractor:
 
         # query định nghĩa
         self.def_query = CPP_LANGUAGE.query("""
+            
+        
             ;
             (function_definition
                 declarator: (function_declarator
@@ -47,7 +49,7 @@ class CppCodeExtractor:
             
             
             (preproc_def name: (identifier) @macro.name) @macro.def
-            
+            (preproc_include path: (_) @include.path) @include.def
             
             (declaration declarator: (identifier) @var.name) @var.def
             (declaration declarator: (init_declarator declarator: (identifier) @var.name)) @var.def
@@ -83,7 +85,14 @@ class CppCodeExtractor:
 
             for node, tag in captures:
                 name = None
-                if tag in ["func.name", "class.name", "struct.name", "macro.name", "var.name"]:
+                if tag == "include.path":
+                    path_text = content[node.start_byte:node.end_byte].decode('utf-8', errors='ignore')
+                    if path_text.startswith('"'):
+                        continue
+                    elif path_text.startswith('<'):
+                        name = path_text.strip('<>')
+
+                elif tag in ["func.name", "class.name", "struct.name", "macro.name", "var.name"]:
                     name = content[node.start_byte:node.end_byte].decode('utf-8', errors='ignore')
                 elif tag == "func.qualified_name":
                     name = content[node.start_byte:node.end_byte].decode('utf-8', errors='ignore')
@@ -91,7 +100,7 @@ class CppCodeExtractor:
                 if name:
                     def_node = node
 
-                    valid_types = ['function_definition', 'class_specifier', 'struct_specifier', 'declaration', 'preproc_def']
+                    valid_types = ['function_definition', 'class_specifier', 'struct_specifier', 'declaration', 'preproc_def', 'preproc_include']
 
                     while def_node.parent:
                         # filter cho biến toàn cục
@@ -106,11 +115,19 @@ class CppCodeExtractor:
                     if def_node:
                         code_block = content[def_node.start_byte:def_node.end_byte].decode('utf-8')
 
-                        self.symbol_map[name] = {
-                            'code': code_block,
-                            'file': file_path,
-                            'type': def_node.type,
-                        }
+                        should_update = True
+
+                        if name in self.symbol_map:
+                            old_code = self.symbol_map[name]['code']
+
+                            if len(code_block) < len(old_code):
+                                should_update = False
+                        if should_update:
+                            self.symbol_map[name] = {
+                                'code': code_block,
+                                'file': file_path,
+                                'type': def_node.type,
+                            }
 
     def get_dependecies_in_code(self, source_code):
         tree = parser.parse(bytes(source_code, "utf-8"))
@@ -154,6 +171,8 @@ class CppCodeExtractor:
                     type_label = "MACRO/CONSTANT"
                 elif info['type'] == 'declaration':
                     type_label = "GLOBAL VARIABLE"
+                elif info['type'] == 'preproc_include':
+                    type_label = "LIBRARY"
 
                 final_output.append(f"// --- {type_label}: {current_name} (File: {info['file']}) ---")
                 final_output.append(info['code'])
@@ -169,11 +188,6 @@ class CppCodeExtractor:
                                 queue.append(k)
                                 break
         return "\n".join(final_output)
-
-
-
-
-
 
 
 
@@ -193,8 +207,8 @@ class CppCodeExtractor:
 #     return res
 
 
-with open("AI_cpp.txt", "w", encoding="utf-8") as f:
+with open("Button_cpp.txt", "w", encoding="utf-8") as f:
     # code = (test_file("D:\Lab\Multi_Agents\Flappy-Bird-Qt\source\common.h"))
     extractor = CppCodeExtractor(r"D:\Lab\Multi_Agents\Flappy-Bird-Qt")
     extractor.index_project()
-    f.write(extractor.get_context("AI::AI"))
+    f.write(extractor.get_context("ButtonFuncs::play"))
